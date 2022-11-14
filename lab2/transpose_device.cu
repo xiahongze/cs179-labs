@@ -13,7 +13,6 @@
  * Comment all of your kernels.
  */
 
-
 /*
  * Each block of the naive transpose handles a 64x64 block of the input matrix,
  * with each thread of the block handling a 1x4 section and each warp handling
@@ -33,20 +32,21 @@
  * it would take a 4194304 x 4194304    matrix, which would take ~17.6TB of
  * memory (well beyond what I expect GPUs to have in the next few years).
  */
-__global__
-void naiveTransposeKernel(const float *input, float *output, int n) {
+__global__ void naiveTransposeKernel(const float *input, float *output, int n)
+{
     // TODO: do not modify code, just comment on suboptimal accesses
 
     const int i = threadIdx.x + 64 * blockIdx.x;
     int j = 4 * threadIdx.y + 64 * blockIdx.y;
     const int end_j = j + 4;
 
+    // can unroll the for-loop
     for (; j < end_j; j++)
         output[j + n * i] = input[i + n * j];
 }
 
-__global__
-void shmemTransposeKernel(const float *input, float *output, int n) {
+__global__ void shmemTransposeKernel(const float *input, float *output, int n)
+{
     // TODO: Modify transpose kernel to use shared memory. All global memory
     // reads and writes should be coalesced. Minimize the number of shared
     // memory bank conflicts (0 bank conflicts should be possible using
@@ -54,45 +54,82 @@ void shmemTransposeKernel(const float *input, float *output, int n) {
 
     // __shared__ float data[???];
 
-    const int i = threadIdx.x + 64 * blockIdx.x;
+    __shared__ float data[64][64];
+
+    int i = threadIdx.x + 64 * blockIdx.x;
     int j = 4 * threadIdx.y + 64 * blockIdx.y;
-    const int end_j = j + 4;
+    int end_j = j + 4;
 
     for (; j < end_j; j++)
-        output[j + n * i] = input[i + n * j];
+        data[threadIdx.x][4 * threadIdx.y + (4 - (end_j - j))] = input[i + n * j];
+
+    __syncthreads();
+
+    int p = threadIdx.x + 64 * blockIdx.y;     // caution!!!
+    int q = 4 * threadIdx.y + 64 * blockIdx.x; // caution!!!
+    int end_q = q + 4;
+
+    for (; q < end_q; q++)
+        output[p + n * q] = data[4 * threadIdx.y + (4 - (end_q - q))][threadIdx.x];
 }
 
-__global__
-void optimalTransposeKernel(const float *input, float *output, int n) {
+__global__ void optimalTransposeKernel(const float *input, float *output, int n)
+{
     // TODO: This should be based off of your shmemTransposeKernel.
     // Use any optimization tricks discussed so far to improve performance.
     // Consider ILP and loop unrolling.
 
-    const int i = threadIdx.x + 64 * blockIdx.x;
-    int j = 4 * threadIdx.y + 64 * blockIdx.y;
-    const int end_j = j + 4;
+    __shared__ float data[64][64];
 
-    for (; j < end_j; j++)
-        output[j + n * i] = input[i + n * j];
+    int i = threadIdx.x + 64 * blockIdx.x;
+    int j = 4 * threadIdx.y + 64 * blockIdx.y;
+
+    // ILP
+    float v0 = input[i + n * j];
+    float v1 = input[i + n * (j + 1)];
+    float v2 = input[i + n * (j + 2)];
+    float v3 = input[i + n * (j + 3)];
+
+    data[threadIdx.x][4 * threadIdx.y] = v0;
+    data[threadIdx.x][4 * threadIdx.y + 1] = v1;
+    data[threadIdx.x][4 * threadIdx.y + 2] = v2;
+    data[threadIdx.x][4 * threadIdx.y + 3] = v3;
+
+    __syncthreads();
+
+    int p = threadIdx.x + 64 * blockIdx.y;     // caution!!!
+    int q = 4 * threadIdx.y + 64 * blockIdx.x; // caution!!!
+
+    output[p + n * q] = data[4 * threadIdx.y][threadIdx.x];
+    output[p + n * (q + 1)] = data[4 * threadIdx.y + 1][threadIdx.x];
+    output[p + n * (q + 2)] = data[4 * threadIdx.y + 2][threadIdx.x];
+    output[p + n * (q + 3)] = data[4 * threadIdx.y + 3][threadIdx.x];
 }
 
+/**
+ * Block size is set to 64 x 16 such that we could parallelise over
+ * the column with four operations, aka, end_j = j + 4
+ */
 void cudaTranspose(
     const float *d_input,
     float *d_output,
     int n,
     TransposeImplementation type)
 {
-    if (type == NAIVE) {
+    if (type == NAIVE)
+    {
         dim3 blockSize(64, 16);
         dim3 gridSize(n / 64, n / 64);
         naiveTransposeKernel<<<gridSize, blockSize>>>(d_input, d_output, n);
     }
-    else if (type == SHMEM) {
+    else if (type == SHMEM)
+    {
         dim3 blockSize(64, 16);
         dim3 gridSize(n / 64, n / 64);
         shmemTransposeKernel<<<gridSize, blockSize>>>(d_input, d_output, n);
     }
-    else if (type == OPTIMAL) {
+    else if (type == OPTIMAL)
+    {
         dim3 blockSize(64, 16);
         dim3 gridSize(n / 64, n / 64);
         optimalTransposeKernel<<<gridSize, blockSize>>>(d_input, d_output, n);
