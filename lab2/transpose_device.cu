@@ -32,20 +32,21 @@
  * it would take a 4194304 x 4194304    matrix, which would take ~17.6TB of
  * memory (well beyond what I expect GPUs to have in the next few years).
  */
-__global__ void naiveTransposeKernel(const float *input, float *output, int n)
+
+const int TILE_DIM = 64;
+const int BLOCK_ROWS = 16;
+
+__global__ void naiveTransposeKernel(const float *input, float *output)
 {
-    // TODO: do not modify code, just comment on suboptimal accesses
+    int x = blockIdx.x * TILE_DIM + threadIdx.x;
+    int y = blockIdx.y * TILE_DIM + threadIdx.y;
+    int width = gridDim.x * TILE_DIM;
 
-    const int i = threadIdx.x + 64 * blockIdx.x;
-    int j = 4 * threadIdx.y + 64 * blockIdx.y;
-    const int end_j = j + 4;
-
-    // can unroll the for-loop
-    for (; j < end_j; j++)
-        output[j + n * i] = input[i + n * j];
+    for (int j = 0; j < TILE_DIM; j += BLOCK_ROWS)
+        output[x * width + (y + j)] = input[(y + j) * width + x];
 }
 
-__global__ void shmemTransposeKernel(const float *input, float *output, int n)
+__global__ void shmemTransposeKernel(const float *input, float *output)
 {
     // TODO: Modify transpose kernel to use shared memory. All global memory
     // reads and writes should be coalesced. Minimize the number of shared
@@ -54,56 +55,42 @@ __global__ void shmemTransposeKernel(const float *input, float *output, int n)
 
     // __shared__ float data[???];
 
-    __shared__ float data[64 * 64];
+    __shared__ float tile[TILE_DIM][TILE_DIM];
 
-    int i = threadIdx.x + 64 * blockIdx.x;
-    int j = 4 * threadIdx.y + 64 * blockIdx.y;
-    int end_j = j + 4;
+    int x = blockIdx.x * TILE_DIM + threadIdx.x;
+    int y = blockIdx.y * TILE_DIM + threadIdx.y;
+    int width = gridDim.x * TILE_DIM;
 
-    for (; j < end_j; j++)
-        data[threadIdx.x * 64 + 4 * threadIdx.y + (4 - (end_j - j))] = input[i + n * j];
+    for (int j = 0; j < TILE_DIM; j += BLOCK_ROWS)
+        tile[threadIdx.y + j][threadIdx.x] = input[(y + j) * width + x];
 
     __syncthreads();
 
-    int p = threadIdx.x + 64 * blockIdx.y;     // caution!!!
-    int q = 4 * threadIdx.y + 64 * blockIdx.x; // caution!!!
-    int end_q = q + 4;
+    x = blockIdx.y * TILE_DIM + threadIdx.x; // transpose block offset
+    y = blockIdx.x * TILE_DIM + threadIdx.y;
 
-    for (; q < end_q; q++)
-        output[p + n * q] = data[(4 * threadIdx.y + (4 - (end_q - q))) * 64 + threadIdx.x];
+    for (int j = 0; j < TILE_DIM; j += BLOCK_ROWS)
+        output[(y + j) * width + x] = tile[threadIdx.x][threadIdx.y + j];
 }
 
-__global__ void optimalTransposeKernel(const float *input, float *output, int n)
+__global__ void optimalTransposeKernel(const float *input, float *output)
 {
-    // TODO: This should be based off of your shmemTransposeKernel.
-    // Use any optimization tricks discussed so far to improve performance.
-    // Consider ILP and loop unrolling.
+    __shared__ float tile[TILE_DIM][TILE_DIM + 1];
 
-    __shared__ float data[64 * 64];
+    int x = blockIdx.x * TILE_DIM + threadIdx.x;
+    int y = blockIdx.y * TILE_DIM + threadIdx.y;
+    int width = gridDim.x * TILE_DIM;
 
-    int i = threadIdx.x + 64 * blockIdx.x;
-    int j = 4 * threadIdx.y + 64 * blockIdx.y;
-
-    // ILP
-    float v0 = input[i + n * j];
-    float v1 = input[i + n * (j + 1)];
-    float v2 = input[i + n * (j + 2)];
-    float v3 = input[i + n * (j + 3)];
-
-    data[threadIdx.x * 64 + 4 * threadIdx.y] = v0;
-    data[threadIdx.x * 64 + 4 * threadIdx.y + 1] = v1;
-    data[threadIdx.x * 64 + 4 * threadIdx.y + 2] = v2;
-    data[threadIdx.x * 64 + 4 * threadIdx.y + 3] = v3;
+    for (int j = 0; j < TILE_DIM; j += BLOCK_ROWS)
+        tile[threadIdx.y + j][threadIdx.x] = input[(y + j) * width + x];
 
     __syncthreads();
 
-    int p = threadIdx.x + 64 * blockIdx.y;     // caution!!!
-    int q = 4 * threadIdx.y + 64 * blockIdx.x; // caution!!!
+    x = blockIdx.y * TILE_DIM + threadIdx.x; // transpose block offset
+    y = blockIdx.x * TILE_DIM + threadIdx.y;
 
-    output[p + n * q] = data[(4 * threadIdx.y) * 64 + threadIdx.x];
-    output[p + n * (q + 1)] = data[(4 * threadIdx.y + 1) * 64 + threadIdx.x];
-    output[p + n * (q + 2)] = data[(4 * threadIdx.y + 2) * 64 + threadIdx.x];
-    output[p + n * (q + 3)] = data[(4 * threadIdx.y + 3) * 64 + threadIdx.x];
+    for (int j = 0; j < TILE_DIM; j += BLOCK_ROWS)
+        output[(y + j) * width + x] = tile[threadIdx.x][threadIdx.y + j];
 }
 
 /**
@@ -118,21 +105,21 @@ void cudaTranspose(
 {
     if (type == NAIVE)
     {
-        dim3 blockSize(64, 16);
-        dim3 gridSize(n / 64, n / 64);
-        naiveTransposeKernel<<<gridSize, blockSize>>>(d_input, d_output, n);
+        dim3 blockSize(TILE_DIM, BLOCK_ROWS);
+        dim3 gridSize(n / TILE_DIM, n / TILE_DIM);
+        naiveTransposeKernel<<<gridSize, blockSize>>>(d_input, d_output);
     }
     else if (type == SHMEM)
     {
-        dim3 blockSize(64, 16);
-        dim3 gridSize(n / 64, n / 64);
-        shmemTransposeKernel<<<gridSize, blockSize>>>(d_input, d_output, n);
+        dim3 blockSize(TILE_DIM, BLOCK_ROWS);
+        dim3 gridSize(n / TILE_DIM, n / TILE_DIM);
+        shmemTransposeKernel<<<gridSize, blockSize>>>(d_input, d_output);
     }
     else if (type == OPTIMAL)
     {
-        dim3 blockSize(64, 16);
-        dim3 gridSize(n / 64, n / 64);
-        optimalTransposeKernel<<<gridSize, blockSize>>>(d_input, d_output, n);
+        dim3 blockSize(TILE_DIM, BLOCK_ROWS);
+        dim3 gridSize(n / TILE_DIM, n / TILE_DIM);
+        optimalTransposeKernel<<<gridSize, blockSize>>>(d_input, d_output);
     }
     // Unknown type
     else
