@@ -54,14 +54,14 @@ __global__ void shmemTransposeKernel(const float *input, float *output, int n)
 
     // __shared__ float data[???];
 
-    __shared__ float data[64][64];
+    __shared__ float data[64 * 64];
 
     int i = threadIdx.x + 64 * blockIdx.x;
     int j = 4 * threadIdx.y + 64 * blockIdx.y;
     int end_j = j + 4;
 
     for (; j < end_j; j++)
-        data[threadIdx.x][4 * threadIdx.y + (4 - (end_j - j))] = input[i + n * j];
+        data[threadIdx.x * 64 + 4 * threadIdx.y + (4 - (end_j - j))] = input[i + n * j];
 
     __syncthreads();
 
@@ -70,7 +70,7 @@ __global__ void shmemTransposeKernel(const float *input, float *output, int n)
     int end_q = q + 4;
 
     for (; q < end_q; q++)
-        output[p + n * q] = data[4 * threadIdx.y + (4 - (end_q - q))][threadIdx.x];
+        output[p + n * q] = data[(4 * threadIdx.y + (4 - (end_q - q))) * 64 + threadIdx.x];
 }
 
 __global__ void optimalTransposeKernel(const float *input, float *output, int n)
@@ -79,7 +79,7 @@ __global__ void optimalTransposeKernel(const float *input, float *output, int n)
     // Use any optimization tricks discussed so far to improve performance.
     // Consider ILP and loop unrolling.
 
-    __shared__ float data[64][64];
+    __shared__ float data[64 * 64];
 
     int i = threadIdx.x + 64 * blockIdx.x;
     int j = 4 * threadIdx.y + 64 * blockIdx.y;
@@ -90,20 +90,20 @@ __global__ void optimalTransposeKernel(const float *input, float *output, int n)
     float v2 = input[i + n * (j + 2)];
     float v3 = input[i + n * (j + 3)];
 
-    data[threadIdx.x][4 * threadIdx.y] = v0;
-    data[threadIdx.x][4 * threadIdx.y + 1] = v1;
-    data[threadIdx.x][4 * threadIdx.y + 2] = v2;
-    data[threadIdx.x][4 * threadIdx.y + 3] = v3;
+    data[threadIdx.x * 64 + 4 * threadIdx.y] = v0;
+    data[threadIdx.x * 64 + 4 * threadIdx.y + 1] = v1;
+    data[threadIdx.x * 64 + 4 * threadIdx.y + 2] = v2;
+    data[threadIdx.x * 64 + 4 * threadIdx.y + 3] = v3;
 
     __syncthreads();
 
     int p = threadIdx.x + 64 * blockIdx.y;     // caution!!!
     int q = 4 * threadIdx.y + 64 * blockIdx.x; // caution!!!
 
-    output[p + n * q] = data[4 * threadIdx.y][threadIdx.x];
-    output[p + n * (q + 1)] = data[4 * threadIdx.y + 1][threadIdx.x];
-    output[p + n * (q + 2)] = data[4 * threadIdx.y + 2][threadIdx.x];
-    output[p + n * (q + 3)] = data[4 * threadIdx.y + 3][threadIdx.x];
+    output[p + n * q] = data[(4 * threadIdx.y) * 64 + threadIdx.x];
+    output[p + n * (q + 1)] = data[(4 * threadIdx.y + 1) * 64 + threadIdx.x];
+    output[p + n * (q + 2)] = data[(4 * threadIdx.y + 2) * 64 + threadIdx.x];
+    output[p + n * (q + 3)] = data[(4 * threadIdx.y + 3) * 64 + threadIdx.x];
 }
 
 /**
