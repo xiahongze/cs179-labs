@@ -94,11 +94,29 @@ cudaMaximumKernel(cufftComplex *out_data, float *max_abs_val,
     */
 
     uint thread_index = blockIdx.x * blockDim.x + threadIdx.x;
+    __shared__ float shared[1024];
+    // create a local max with -infinity
     float local_max = -INFINITY;
     for (int i = thread_index; i < padded_length; i += blockDim.x * gridDim.x) {
         local_max = max(local_max, out_data[i].x);
     }
-    atomicMax(max_abs_val, local_max);
+    // store the local max to the shared memory
+    shared[threadIdx.x] = local_max;
+
+    // reduce the local max to the global max
+    __syncthreads();
+
+    for (int i = blockDim.x / 2; i > 0; i >>= 1) {
+        if (threadIdx.x < i) {
+            shared[threadIdx.x] = max(shared[threadIdx.x], shared[threadIdx.x + i]);
+        }
+        __syncthreads();
+    }
+
+    // set the global max
+    if (threadIdx.x == 0) {
+        atomicMax(max_abs_val, shared[threadIdx.x]);
+    }
 }
 
 __global__
