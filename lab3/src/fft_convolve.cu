@@ -93,29 +93,31 @@ cudaMaximumKernel(cufftComplex *out_data, float *max_abs_val,
 
     */
 
+    // with the `extern` keyword, we can declare a shared memory array whose size is known at runtime
+    // the size of the array is specified in the kernel call 
+    extern __shared__ float sdata[];
     uint thread_index = blockIdx.x * blockDim.x + threadIdx.x;
-    __shared__ float shared[1024];
-    // create a local max with -infinity
     float local_max = -INFINITY;
     for (int i = thread_index; i < padded_length; i += blockDim.x * gridDim.x) {
         local_max = max(local_max, out_data[i].x);
     }
-    // store the local max to the shared memory
-    shared[threadIdx.x] = local_max;
 
-    // reduce the local max to the global max
+    sdata[threadIdx.x] = local_max;
     __syncthreads();
 
+    // reduction logic: each thread will compare its value with the value of the thread at the other end of the block
+    // the thread with the smaller value will be discarded. This process is repeated until only one value remains.
+    // the final value is stored in the first element of the shared memory array.
     for (int i = blockDim.x / 2; i > 0; i >>= 1) {
         if (threadIdx.x < i) {
-            shared[threadIdx.x] = max(shared[threadIdx.x], shared[threadIdx.x + i]);
+            sdata[threadIdx.x] = max(sdata[threadIdx.x], sdata[threadIdx.x + i]);
         }
         __syncthreads();
     }
 
-    // set the global max
     if (threadIdx.x == 0) {
-        atomicMax(max_abs_val, shared[threadIdx.x]);
+        // the first thread of each block will compare the value in the shared memory array with the value in the global memory array
+        atomicMax(max_abs_val, sdata[0]);
     }
 }
 
@@ -161,8 +163,8 @@ void cudaCallMaximumKernel(const unsigned int blocks,
 
     /* TODO 2: Call the max-finding kernel. */
 
-    cudaMaximumKernel<<<blocks, threadsPerBlock>>>(out_data, max_abs_val, padded_length);
-
+    // following the cuda syntax, kernelName<<<numBlocks, numThreads, sharedMemSize>>>
+    cudaMaximumKernel<<<blocks, threadsPerBlock, threadsPerBlock * sizeof(float)>>>(out_data, max_abs_val, padded_length);
 }
 
 
