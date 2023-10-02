@@ -555,8 +555,12 @@ int large_gauss_test(int argc, char **argv){
         /* TODO 2: Allocate memory to store the maximum magnitude found. 
         (You only need enough space for one floating-point number.) */
 
+        gpuErrchk(cudaMalloc((void**)&dev_max_abs_val, sizeof(float)));
+
         /* TODO 2: Set it to 0 in preparation for running. 
         (Recommend using cudaMemset) */
+
+        gpuErrchk(cudaMemset(dev_max_abs_val, 0, sizeof(float)));
 
 
         /* NOTE: This is a function in the fft_convolve_cuda.cu file,
