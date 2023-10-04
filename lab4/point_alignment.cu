@@ -250,7 +250,15 @@ int main(int argc, char *argv[]) {
     ///////////////////////////////////////////////////////////////////////////
 
     // TODO: Free GPU memory
-
+    cudaFree(dev_x1mat);
+    cudaFree(dev_x2mat);
+    cudaFree(dev_xx4x4);
+    cudaFree(dev_x1Tx2);
+    cudaFree(work);
+    cudaFree(pivots);
+    cudaFree(dev_trans_mat);
+    cudaFree(dev_pt);
+    cudaFree(dev_trans_pt);
 
     // TODO: Free CPU memory
     free(out_transformation);
