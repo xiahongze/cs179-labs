@@ -224,7 +224,7 @@ int main(int argc, char *argv[]) {
     // So now dev_trans_pt has shape (4 x n)
     float * trans_pt = (float *) malloc(sizeof(float) * num_points * point_dim);
     // copy from device to host
-    cudaMemcpy(trans_pt, dev_trans_pt, num_points * point_dim * sizeof(float), cudaMemcpyDeviceToHost);
+    cublasGetMatrix(num_points, point_dim, sizeof(float), dev_trans_pt, num_points, trans_pt, num_points);
 
     // get Object from transformed vertex matrix
     Object trans_obj = obj_from_vertex_array(trans_pt, num_points, point_dim, obj1);
