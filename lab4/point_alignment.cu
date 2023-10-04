@@ -162,7 +162,7 @@ int main(int argc, char *argv[]) {
     cudaMalloc((void **)&pivots, point_dim * sizeof(int));
 
 
-    int *info;
+    int *info = 0;
 
 
     // TODO: Now, call the factorizer cusolverDnSgetrf, using the above initialized data
@@ -179,7 +179,7 @@ int main(int argc, char *argv[]) {
 
     // TODO: Copy final transformation back to host. Note that at this point
     // the transformation matrix is transposed
-    float * out_transformation;
+    float * out_transformation = (float *) malloc(sizeof(float) * point_dim * point_dim);
 
     status = cublasGetMatrix(point_dim, point_dim, sizeof(float), dev_x1Tx2, point_dim, out_transformation, point_dim);
     checkCublasStatus(status);
