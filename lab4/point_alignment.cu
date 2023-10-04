@@ -167,16 +167,15 @@ int main(int argc, char *argv[]) {
 
     // TODO: Now, call the factorizer cusolverDnSgetrf, using the above initialized data
     solver_status = cusolverDnSgetrf(solver_handle, point_dim, point_dim, dev_xx4x4, point_dim, work, pivots, info);
-
+    checkCusolverStatus(solver_status);
 
     // TODO: Finally, solve the factorized version using a direct call to cusolverDnSgetrs
-
     solver_status = cusolverDnSgetrs(solver_handle, CUBLAS_OP_N, point_dim, point_dim, dev_xx4x4, point_dim, pivots, dev_x1Tx2, point_dim, info);
-
+    checkCusolverStatus(solver_status);
 
     // TODO: Destroy the cuSolver handle
     solver_status = cusolverDnDestroy(solver_handle);
-
+    checkCusolverStatus(solver_status);
 
     // TODO: Copy final transformation back to host. Note that at this point
     // the transformation matrix is transposed
