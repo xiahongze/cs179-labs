@@ -232,7 +232,9 @@ int main(int argc, char *argv[]) {
     status = cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_T, point_dim, num_points, num_points, &one_d, dev_trans_mat, point_dim, dev_pt, num_points, &zero_d, dev_trans_pt, num_points);
 
     // So now dev_trans_pt has shape (4 x n)
-    float * trans_pt; 
+    float * trans_pt = (float *) malloc(sizeof(float) * num_points * point_dim);
+    // copy from device to host
+    cudaMemcpy(trans_pt, dev_trans_pt, num_points * point_dim * sizeof(float), cudaMemcpyDeviceToHost);
 
     // get Object from transformed vertex matrix
     Object trans_obj = obj_from_vertex_array(trans_pt, num_points, point_dim, obj1);
