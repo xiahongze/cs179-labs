@@ -113,18 +113,20 @@ int main(int argc, char *argv[]) {
     // shape(dev_x1mat) = (N, 4) --> B
     // shape(Transpose[x1mat] . x1mat) = (4, 4) --> C
     // m = 4, n = 4, k = N
-    // lda = N, ldb = 4, ldc = 4 for column major
+    // lda = N, ldb = N, ldc = 4 for column major
 
     status = cublasSgemm(handle, CUBLAS_OP_T, CUBLAS_OP_N, point_dim, point_dim, num_points, &one, dev_x1mat, num_points, dev_x1mat, num_points, &zero, dev_xx4x4, point_dim);
+    std::cout << "xx4x4 = Transpose[x1mat] . x1mat status: " << status << std::endl;
     checkCublasStatus(status);
 
     // shape(dev_x1Tx2^T) = (4, N) --> A
     // shape(dev_x1mat) = (N, 4) --> B
     // shape(Transpose[x1mat] . x2mat) = (4, 4) --> C
     // m = 4, n = 4, k = N
-    // lda = N, ldb = 4, ldc = 4 for column major
+    // lda = N, ldb = N, ldc = 4 for column major
 
-    status = cublasSgemm(handle, CUBLAS_OP_T, CUBLAS_OP_N, point_dim, point_dim, num_points, &one, dev_x1mat, num_points, dev_x2mat, point_dim, &zero, dev_x1Tx2, point_dim);
+    status = cublasSgemm(handle, CUBLAS_OP_T, CUBLAS_OP_N, point_dim, point_dim, num_points, &one, dev_x1mat, num_points, dev_x2mat, num_points, &zero, dev_x1Tx2, point_dim);
+    std::cout << "x1Tx2 = Transpose[x1mat] . x2mat status: " << status << std::endl;
     checkCublasStatus(status);
 
 
@@ -227,9 +229,11 @@ int main(int argc, char *argv[]) {
     // shape(point_mat^T) = (4, N) --> B
     // shape(trans_mat . point_mat^T) = (4, N) --> C
     // m = 4, n = N, k = 4
-    // lda = 4, ldb = N, ldc = N for column major
+    // lda = 4, ldb = N, ldc = 4 for column major
 
-    status = cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_T, point_dim, num_points, num_points, &one_d, dev_trans_mat, point_dim, dev_pt, num_points, &zero_d, dev_trans_pt, num_points);
+    status = cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_T, point_dim, num_points, num_points, &one_d, dev_trans_mat, point_dim, dev_pt, num_points, &zero_d, dev_trans_pt, point_dim);
+    std::cout << "trans_mat . point_mat^T status: " << status << std::endl;
+    checkCublasStatus(status);
 
     // So now dev_trans_pt has shape (4 x n)
     float * trans_pt = (float *) malloc(sizeof(float) * num_points * point_dim);
