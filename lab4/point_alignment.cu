@@ -175,10 +175,10 @@ int main(int argc, char *argv[]) {
     // TODO: Don't forget to set the bottom row of the final transformation
     //       to [0,0,0,1] (right-most columns of the transposed matrix)
 
-    out_transformation[3 * point_dim + 0] = 0;
-    out_transformation[3 * point_dim + 1] = 0;
-    out_transformation[3 * point_dim + 2] = 0;
-    out_transformation[3 * point_dim + 3] = 1;
+    // out_transformation[3 * point_dim + 0] = 0;
+    // out_transformation[3 * point_dim + 1] = 0;
+    // out_transformation[3 * point_dim + 2] = 0;
+    // out_transformation[3 * point_dim + 3] = 1;
 
     // Print transformation in row order.
     for (int i = 0; i < 4; i++) {
@@ -194,15 +194,17 @@ int main(int argc, char *argv[]) {
 
     // TODO Allocate and Initialize data matrix
     float * dev_pt;
-    cudaMalloc((void **)&dev_pt, num_points * point_dim * sizeof(float));
+    CUDA_CALL(cudaMalloc((void **)&dev_pt, num_points * point_dim * sizeof(float)));
+    CUBLAS_CALL(cublasSetMatrix(num_points, point_dim, sizeof(float), x1mat, num_points, dev_pt, num_points));
 
     // TODO Allocate and Initialize transformation matrix
     float * dev_trans_mat;
-    cudaMalloc((void **)&dev_trans_mat, point_dim * point_dim * sizeof(float));
+    CUDA_CALL(cudaMalloc((void **)&dev_trans_mat, point_dim * point_dim * sizeof(float)));
+    CUBLAS_CALL(cublasSetMatrix(point_dim, point_dim, sizeof(float), out_transformation, point_dim, dev_pt, point_dim));
 
     // TODO Allocate and Initialize transformed points
     float * dev_trans_pt;
-    cudaMalloc((void **)&dev_trans_pt, num_points * point_dim * sizeof(float));
+    CUDA_CALL(cudaMalloc((void **)&dev_trans_pt, num_points * point_dim * sizeof(float)));
 
     float one_d = 1;
     float zero_d = 0;
