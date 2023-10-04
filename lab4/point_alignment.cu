@@ -21,20 +21,6 @@
 
 #define IDX2C(i,j,ld) (((j)*(ld))+(i))
 
-void checkCublasStatus(cublasStatus_t status) {
-    if (status != CUBLAS_STATUS_SUCCESS) {
-        printf("CUBLAS error: %d\n", status);
-        exit(1);
-    }
-}
-
-void checkCusolverStatus(cusolverStatus_t status) {
-    if (status != CUSOLVER_STATUS_SUCCESS) {
-        printf("cuSolver error: %d\n", status);
-        exit(1);
-    }
-}
-
 int main(int argc, char *argv[]) {
 
     if (argc != 4)
@@ -78,7 +64,7 @@ int main(int argc, char *argv[]) {
     // TODO: Initialize cublas handle
     cublasHandle_t handle;
     cublasStatus_t status = cublasCreate(&handle);
-    checkCublasStatus(status);
+    CUBLAS_CALL(status);
 
     float * dev_x1mat;
     float * dev_x2mat;
@@ -88,16 +74,16 @@ int main(int argc, char *argv[]) {
     // TODO: Allocate device memory and copy over the data onto the device
     // Hint: Use cublasSetMatrix() for copying
 
-    cudaMalloc((void **)&dev_x1mat, num_points * point_dim * sizeof(float));
-    cudaMalloc((void **)&dev_x2mat, num_points * point_dim * sizeof(float));
-    cudaMalloc((void **)&dev_xx4x4, point_dim * point_dim * sizeof(float));
-    cudaMalloc((void **)&dev_x1Tx2, point_dim * point_dim * sizeof(float));
+    CUDA_CALL(cudaMalloc((void **)&dev_x1mat, num_points * point_dim * sizeof(float)));
+    CUDA_CALL(cudaMalloc((void **)&dev_x2mat, num_points * point_dim * sizeof(float)));
+    CUDA_CALL(cudaMalloc((void **)&dev_xx4x4, point_dim * point_dim * sizeof(float)));
+    CUDA_CALL(cudaMalloc((void **)&dev_x1Tx2, point_dim * point_dim * sizeof(float)));
 
     status = cublasSetMatrix(num_points, point_dim, sizeof(float), x1mat, num_points, dev_x1mat, num_points);
-    checkCublasStatus(status);
+    CUBLAS_CALL(status);
 
     status = cublasSetMatrix(num_points, point_dim, sizeof(float), x2mat, num_points, dev_x2mat, num_points);
-    checkCublasStatus(status);
+    CUBLAS_CALL(status);
 
     // Now, proceed with the computations necessary to solve for the linear
     // transformation.
@@ -117,7 +103,7 @@ int main(int argc, char *argv[]) {
 
     status = cublasSgemm(handle, CUBLAS_OP_T, CUBLAS_OP_N, point_dim, point_dim, num_points, &one, dev_x1mat, num_points, dev_x1mat, num_points, &zero, dev_xx4x4, point_dim);
     std::cout << "xx4x4 = Transpose[x1mat] . x1mat status: " << status << std::endl;
-    checkCublasStatus(status);
+    CUBLAS_CALL(status);
 
     // shape(dev_x1Tx2^T) = (4, N) --> A
     // shape(dev_x1mat) = (N, 4) --> B
@@ -127,7 +113,7 @@ int main(int argc, char *argv[]) {
 
     status = cublasSgemm(handle, CUBLAS_OP_T, CUBLAS_OP_N, point_dim, point_dim, num_points, &one, dev_x1mat, num_points, dev_x2mat, num_points, &zero, dev_x1Tx2, point_dim);
     std::cout << "x1Tx2 = Transpose[x1mat] . x2mat status: " << status << std::endl;
-    checkCublasStatus(status);
+    CUBLAS_CALL(status);
 
 
     // TODO: Finally, solve the system using LU-factorization! We're solving
@@ -146,14 +132,14 @@ int main(int argc, char *argv[]) {
     // TODO: Make handle for cuSolver
     cusolverDnHandle_t solver_handle;
     cusolverStatus_t solver_status = cusolverDnCreate(&solver_handle);
-    checkCusolverStatus(solver_status);
+    CUSOLVER_CALL(solver_status);
 
     // TODO: Initialize work buffer using cusolverDnSgetrf_bufferSize
     float * work;
     int Lwork;
 
     solver_status = cusolverDnSgetrf_bufferSize(solver_handle, point_dim, point_dim, dev_xx4x4, point_dim, &Lwork);
-    checkCusolverStatus(solver_status);
+    CUSOLVER_CALL(solver_status);
 
     // TODO: compute buffer size and prepare memory
     cudaMalloc((void **)&work, Lwork * sizeof(float));
@@ -169,22 +155,22 @@ int main(int argc, char *argv[]) {
 
     // TODO: Now, call the factorizer cusolverDnSgetrf, using the above initialized data
     solver_status = cusolverDnSgetrf(solver_handle, point_dim, point_dim, dev_xx4x4, point_dim, work, pivots, info);
-    checkCusolverStatus(solver_status);
+    CUSOLVER_CALL(solver_status);
 
     // TODO: Finally, solve the factorized version using a direct call to cusolverDnSgetrs
     solver_status = cusolverDnSgetrs(solver_handle, CUBLAS_OP_N, point_dim, point_dim, dev_xx4x4, point_dim, pivots, dev_x1Tx2, point_dim, info);
-    checkCusolverStatus(solver_status);
+    CUSOLVER_CALL(solver_status);
 
     // TODO: Destroy the cuSolver handle
     solver_status = cusolverDnDestroy(solver_handle);
-    checkCusolverStatus(solver_status);
+    CUSOLVER_CALL(solver_status);
 
     // TODO: Copy final transformation back to host. Note that at this point
     // the transformation matrix is transposed
     float * out_transformation = (float *) malloc(sizeof(float) * point_dim * point_dim);
 
     status = cublasGetMatrix(point_dim, point_dim, sizeof(float), dev_x1Tx2, point_dim, out_transformation, point_dim);
-    checkCublasStatus(status);
+    CUBLAS_CALL(status);
 
     // TODO: Don't forget to set the bottom row of the final transformation
     //       to [0,0,0,1] (right-most columns of the transposed matrix)
@@ -233,7 +219,7 @@ int main(int argc, char *argv[]) {
 
     status = cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_T, point_dim, num_points, num_points, &one_d, dev_trans_mat, point_dim, dev_pt, num_points, &zero_d, dev_trans_pt, point_dim);
     std::cout << "trans_mat . point_mat^T status: " << status << std::endl;
-    checkCublasStatus(status);
+    CUBLAS_CALL(status);
 
     // So now dev_trans_pt has shape (4 x n)
     float * trans_pt = (float *) malloc(sizeof(float) * num_points * point_dim);
