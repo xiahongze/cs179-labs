@@ -196,7 +196,6 @@ int main(int argc, char *argv[]) {
     float * dev_pt;
     CUDA_CALL(cudaMalloc((void **)&dev_pt, num_points * point_dim * sizeof(float)));
     CUBLAS_CALL(cublasSetMatrix(num_points, point_dim, sizeof(float), x1mat, num_points, dev_pt, num_points));
-
     // std::cout << "x1mat: " << std::endl;
     // // Print x1mat in row order.
     // for (int i = 0; i < 10; i++) {
@@ -209,7 +208,7 @@ int main(int argc, char *argv[]) {
     // TODO Allocate and Initialize transformation matrix
     float * dev_trans_mat;
     CUDA_CALL(cudaMalloc((void **)&dev_trans_mat, point_dim * point_dim * sizeof(float)));
-    CUBLAS_CALL(cublasSetMatrix(point_dim, point_dim, sizeof(float), out_transformation, point_dim, dev_pt, point_dim));
+    CUBLAS_CALL(cublasSetMatrix(point_dim, point_dim, sizeof(float), out_transformation, point_dim, dev_trans_mat, point_dim));
 
     // TODO Allocate and Initialize transformed points
     float * dev_trans_pt;
@@ -228,14 +227,17 @@ int main(int argc, char *argv[]) {
     // m = 4, n = N, k = 4
     // lda = 4, ldb = N, ldc = 4 for column major
 
-    status = cublasSgemm(handle, CUBLAS_OP_T, CUBLAS_OP_T, point_dim, num_points, point_dim, &one_d, dev_x1Tx2, point_dim, dev_x1mat, num_points, &zero_d, dev_trans_pt, point_dim);
+    status = cublasSgemm(handle, CUBLAS_OP_T, CUBLAS_OP_T, point_dim, num_points, point_dim, &one_d, dev_trans_mat, point_dim, dev_pt, num_points, &zero_d, dev_trans_pt, point_dim);
     std::cout << "trans_mat . point_mat^T status: " << status << std::endl;
     CUBLAS_CALL(status);
 
     // So now dev_trans_pt has shape (4 x n)
     float * trans_pt = (float *) malloc(sizeof(float) * num_points * point_dim);
-    // copy from device to host
-    cublasGetMatrix(point_dim, num_points, sizeof(float), dev_trans_pt, num_points, trans_pt, num_points);
+    // copy from device to host, note that the leading dimension needs to be set correctly
+    // if wrong, you still get values out from matrix but the values will be very off
+    // Leading dimension is the number of rows in the matrix before transposing for column major data layout
+    // Leading dimension is the number of columns in the matrix before transposing for row major data layout
+    cublasGetMatrix(point_dim, num_points, sizeof(float), dev_trans_pt, point_dim, trans_pt, point_dim);
 
     // get Object from transformed vertex matrix
     Object trans_obj = obj_from_vertex_array(trans_pt, num_points, point_dim, obj1);
