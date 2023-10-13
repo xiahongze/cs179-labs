@@ -7,8 +7,8 @@
 #include "utils.cuh"
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
-#include <thrust/device_ptr.h>
-#include <thrust/fill.h>
+// #include <thrust/device_ptr.h>
+// #include <thrust/fill.h>
 #include <algorithm>
 #include "helper_cuda.h"
 
@@ -20,9 +20,11 @@
  */
 template<typename T> void cudaMemsetType(T *dev_ptr, T val, int n_vals)
 {
-    thrust::device_ptr<T> thrust_dev_ptr(dev_ptr);
-    thrust::fill(thrust_dev_ptr, thrust_dev_ptr + n_vals, val);
+    // thrust::device_ptr<T> thrust_dev_ptr(dev_ptr);
+    // thrust::fill(thrust_dev_ptr, thrust_dev_ptr + n_vals, val);
+    CUDA_CALL(cudaMemset(dev_ptr, val, n_vals * sizeof(T)));
 }
+
 
 /**
  * Invokes a CUDA kernel to compute the average cross entropy between softmaxed
