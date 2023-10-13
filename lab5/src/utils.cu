@@ -47,6 +47,8 @@ float CrossEntropyLoss(float* pred_Y, float* true_Y, int n, int c, int h, int w)
     // Accumulate the total loss on the device by invoking a kernel
     int n_blocks = std::min(65535, (n * c * h * w + BW  - 1) / BW);
     // TODO (set 5): call CrossEntropyKernel
+    CrossEntropyKernel<<<n_blocks, BW, BW * sizeof(float)>>>(pred_Y, true_Y,
+        d_loss, n, c, h, w);
 
     // Copy back the accumulated loss on the device back to the host
     CUDA_CALL( cudaMemcpy(&loss, d_loss, sizeof(float), cudaMemcpyDeviceToHost) );
@@ -105,6 +107,31 @@ __global__ void CrossEntropyKernel(float* pred_Y, float* true_Y, float *loss,
     // TODO (set 5): use a parallel reduction to compute cross-entropy between
     //               pred_Y and true_Y, i.e. -sum( log(pred_Y[i]) * true_Y[i] ),
     //               where i ranges from 0 to (n*c*h*w) - 1
+
+    // have each thread in each block accumulate some of the total loss in
+    // shared memory
+    unsigned idx = blockIdx.x * blockDim.x + threadIdx.x;
+    shmem[threadIdx.x] = 0.0;
+    for (; idx < n; idx += blockDim.x * gridDim.x)
+    {
+        unsigned idx_cur = idx * c * h * w;
+        for (unsigned j = 0; j < c * h * w; ++j)
+        {
+            // Add the loss for this example to the shared memory
+            shmem[threadIdx.x] -= log(pred_Y[idx_cur + j]);
+        }
+    }
+
+    __syncthreads();
+
+    // do a reduction to sum up all of the loss components in this block's
+    // shared memory
+    for (unsigned s = blockDim.x / 2; s > 0; s >>= 1)
+    {
+        if (threadIdx.x < s)
+            shmem[threadIdx.x] += shmem[threadIdx.x + s];
+        __syncthreads();
+    }
 
     // atomically add the accumulated loss per block into the global accumulator
     if (threadIdx.x == 0)
