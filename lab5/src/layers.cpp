@@ -464,6 +464,8 @@ Conv2D::Conv2D(Layer *prev, int n_kernels, int kernel_size, int stride,
     int n, c, h, w, n_stride, c_stride, h_stride, w_stride;
     // TODO (set 6): Get the input tensor descriptor in_shape into the variables
     //               declared above
+    CUDNN_CALL(cudnnGetTensor4dDescriptor(in_shape, &dtype, &n, &c, &h, &w,
+        &n_stride, &c_stride, &h_stride, &w_stride));
 
     // Compute nubmer of weights and biases
     this->n_weights = n_kernels * c * kernel_size * kernel_size;
@@ -472,6 +474,9 @@ Conv2D::Conv2D(Layer *prev, int n_kernels, int kernel_size, int stride,
     // TODO (set 6): Create & set a filter descriptor for a float array ordered
     //               NCHW, w/ shape n_kernels x c x kernel_size x kernel_size.
     //               This is class field filter_desc.
+    CUDNN_CALL( cudnnCreateFilterDescriptor(&filter_desc) );
+    CUDNN_CALL( cudnnSetFilter4dDescriptor(filter_desc, CUDNN_DATA_FLOAT,
+        CUDNN_TENSOR_NCHW, n_kernels, c, kernel_size, kernel_size) );
 
     // Set tensor descriptor for biases (to broadcast adding biases)
     CUDNN_CALL( cudnnCreateTensorDescriptor(&bias_desc) );
@@ -483,6 +488,9 @@ Conv2D::Conv2D(Layer *prev, int n_kernels, int kernel_size, int stride,
     //               padding (x and y), a stride (in both x and y) equal to
     //               argument stride, and horizontal and vertical dilation
     //               factors of 1. This is class field conv_desc.
+    CUDNN_CALL( cudnnCreateConvolutionDescriptor(&conv_desc) );
+    CUDNN_CALL( cudnnSetConvolution2dDescriptor(conv_desc,
+        0, 0, stride, stride, 1, 1, CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT) );
 
     // Set output shape descriptor
     CUDNN_CALL( cudnnGetConvolution2dForwardOutputDim(conv_desc,
@@ -511,6 +519,7 @@ Conv2D::~Conv2D()
     CUDNN_CALL( cudnnDestroyTensorDescriptor(bias_desc) );
 
     // TODO (set 6): Destroy filter_desc and conv_desc
+    CUDNN_CALL( cudnnDestroyFilterDescriptor(filter_desc) );
 }
 
 /**
@@ -544,6 +553,12 @@ void Conv2D::forward_pass()
     //               Use class fields workspace and workspace_size for the
     //               workspace related arguments in the function call, and
     //               use fwd_algo.algo for the algorithm.
+    CUDNN_CALL( cudnnConvolutionForward(cudnnHandle,
+        &one, in_shape, in_batch,
+        filter_desc, weights,
+        conv_desc, fwd_algo.algo,
+        workspace, workspace_size,
+        &zero, out_shape, out_batch) );
 
     CUDNN_CALL( cudnnAddTensor(cudnnHandle,
         &one, bias_desc, biases,
@@ -564,6 +579,12 @@ void Conv2D::backward_pass(float learning_rate)
     //               Use class fields workspace and workspace_size for the
     //               workspace related arguments in the function call, and use
     //               bwd_filter_algo.algo for the algorithm.
+    CUDNN_CALL( cudnnConvolutionBackwardFilter(cudnnHandle,
+        &one, in_shape, in_batch,
+        out_shape, grad_out_batch,
+        conv_desc, bwd_filter_algo.algo,
+        workspace, workspace_size,
+        &zero, filter_desc, grad_weights) );
 
 
     // Compute the gradient with respect to the biases
@@ -577,14 +598,24 @@ void Conv2D::backward_pass(float learning_rate)
     //               Use class fields workspace and workspace_size for the
     //               workspace related arguments in the function call and use
     //               bwd_data_algo.algo for the algorithm.
+    CUDNN_CALL( cudnnConvolutionBackwardData(cudnnHandle,
+        &one, filter_desc, weights,
+        out_shape, grad_out_batch,
+        conv_desc, bwd_data_algo.algo,
+        workspace, workspace_size,
+        &zero, in_shape, grad_in_batch) );
 
 
     // Descend along the gradients of the weights and biases using cublasSaxpy
     float eta = -learning_rate;
     
     // TODO (set 6): weights = weights + eta * grad_weights
+    CUBLAS_CALL( cublasSaxpy(cublasHandle, n_weights,
+        &eta, grad_weights, 1, weights, 1) );
 
     // TODO (set 6): biases = biases + eta * grad_biases
+    CUBLAS_CALL( cublasSaxpy(cublasHandle, n_biases,
+        &eta, grad_biases, 1, biases, 1) );
 }
 
 
