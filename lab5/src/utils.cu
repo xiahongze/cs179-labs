@@ -120,7 +120,7 @@ __global__ void CrossEntropyKernel(float* pred_Y, float* true_Y, float *loss,
         for (unsigned j = 0; j < c * h * w; ++j)
         {
             // Add the loss for this example to the shared memory
-            shmem[threadIdx.x] -= log(pred_Y[idx_cur + j]);
+            shmem[threadIdx.x] -= log(pred_Y[idx_cur + j]) * true_Y[idx_cur + j];
         }
     }
 
