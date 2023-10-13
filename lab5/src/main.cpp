@@ -39,8 +39,8 @@ int main(int argc, char **argv)
     // Load training set
     int n_train, c, h, w, n_classes;
     float *train_X, *train_Y;
-    LoadMNISTData(dirname + "/train-images.idx3-ubyte",
-        dirname + "/train-labels.idx1-ubyte",
+    LoadMNISTData(dirname + "/train-images-idx3-ubyte",
+        dirname + "/train-labels-idx1-ubyte",
         n_train, c, h, w, n_classes, &train_X, &train_Y);
     std::cout << "Loaded training set." << std::endl;
 
@@ -67,8 +67,8 @@ int main(int argc, char **argv)
     // Load test set
     int n_test;
     float *test_X, *test_Y;
-    LoadMNISTData(dirname + "/test-images.idx3-ubyte",
-        dirname + "/test-labels.idx1-ubyte",
+    LoadMNISTData(dirname + "/test-images-idx3-ubyte",
+        dirname + "/test-labels-idx1-ubyte",
         n_test, c, h, w, n_classes, &test_X, &test_Y);
     std::cout << "Loaded test set." << std::endl;
 
