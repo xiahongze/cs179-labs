@@ -383,23 +383,34 @@ Activation::Activation(Layer *prev, cudnnActivationMode_t activationMode,
     double coef, cublasHandle_t cublasHandle, cudnnHandle_t cudnnHandle)
 : Layer(prev, cublasHandle, cudnnHandle)
 {
+    // the Layer API already initializes in_shape and we just need to get the
+    // n, c, h, w, etc parameters from it and use them to initialize out_shape
     cudnnDataType_t dtype;
     int n, c, h, w, nStride, cStride, hStride, wStride;
 
     // TODO (set 5): get descriptor of input minibatch, in_shape
+    CUDNN_CALL(cudnnGetTensor4dDescriptor(in_shape, &dtype, &n, &c, &h, &w,
+        &nStride, &cStride, &hStride, &wStride));
 
     // TODO (set 5): set descriptor of output minibatch, out_shape, to have the
     //               same parameters as in_shape and be ordered NCHW
+    CUDNN_CALL(cudnnCreateTensorDescriptor(&out_shape));
+    CUDNN_CALL(cudnnSetTensor4dDescriptor(out_shape, CUDNN_TENSOR_NCHW,
+        dtype, n, c, h, w));
 
     allocate_buffers();
 
     // TODO (set 5): create activation descriptor, and set it to have the given
     //               activationMode, propagate NaN's, and have coefficient coef
+    CUDNN_CALL(cudnnCreateActivationDescriptor(&activation_desc));
+    CUDNN_CALL(cudnnSetActivationDescriptor(activation_desc, activationMode,
+        CUDNN_PROPAGATE_NAN, coef));
 }
 
 Activation::~Activation()
 {
     // TODO (set 5): destroy the activation descriptor
+    CUDNN_CALL(cudnnDestroyActivationDescriptor(activation_desc));
 }
 
 /**
@@ -411,6 +422,9 @@ void Activation::forward_pass()
     float one = 1.0, zero = 0.0;
 
     // TODO (set 5): apply activation, i.e. out_batch = activation(in_batch)
+    CUDNN_CALL(cudnnActivationForward(cudnnHandle, activation_desc,
+        &one, in_shape, in_batch,
+        &zero, out_shape, out_batch));
 }
 
 /**
@@ -424,6 +438,11 @@ void Activation::backward_pass(float learning_rate)
     float one = 1.0, zero = 0.0;
 
     // TODO (set 5): do activation backwards, i.e. compute grad_in_batch
+    CUDNN_CALL(cudnnActivationBackward(cudnnHandle, activation_desc,
+        &one, out_shape, out_batch,
+        out_shape, grad_out_batch,
+        in_shape, in_batch,
+        &zero, in_shape, grad_in_batch));
 }
 
 /******************************************************************************/
