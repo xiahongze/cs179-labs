@@ -31,8 +31,7 @@ NVCC_FLAGS += -g -dc -Wno-deprecated-gpu-targets --std=c++11 \
              --expt-relaxed-constexpr
 NVCC_INCLUDE =
 NVCC_LIBS = 
-NVCC_GENCODES = -gencode arch=compute_35,code=sm_35 \
-        -gencode arch=compute_50,code=sm_50 \
+NVCC_GENCODES = -gencode arch=compute_50,code=sm_50 \
         -gencode arch=compute_52,code=sm_52 \
         -gencode arch=compute_60,code=sm_60 \
         -gencode arch=compute_61,code=sm_61 \
