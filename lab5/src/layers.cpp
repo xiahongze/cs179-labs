@@ -221,7 +221,8 @@ void Layer::init_weights_biases()
 /******************************************************************************/
 
 /** 
- * The output of an input layer is just 
+ * The output of an input layer is just the input minibatch itself, so we don't
+ * need to allocate any extra memory for it.
  */
 Input::Input(int n, int c, int h, int w,
     cublasHandle_t cublasHandle, cudnnHandle_t cudnnHandle)
@@ -229,6 +230,9 @@ Input::Input(int n, int c, int h, int w,
 {
     // TODO (set 5): set output tensor descriptor out_shape to have format
     //               NCHW, be floats, and have dimensions n, c, h, w
+    CUDNN_CALL(cudnnCreateTensorDescriptor(&out_shape));
+    CUDNN_CALL(cudnnSetTensor4dDescriptor(out_shape, CUDNN_TENSOR_NCHW,
+        CUDNN_DATA_FLOAT, n, c, h, w));
 
     allocate_buffers();
 }
