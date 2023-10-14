@@ -21,3 +21,5 @@ __global__ void CrossEntropyKernel(float *pred_Y, float *true_Y, float *loss,
 
 __global__ void SoftThresholdAccKernel(float *pred_Y, float *true_Y, float *acc,
     int n, int c, int h, int w);
+
+float computeCrossEntropyLoss(float* dev_pred_Y, float* dev_true_Y, int n, int c, int h, int w);

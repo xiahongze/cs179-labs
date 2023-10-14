@@ -25,6 +25,20 @@ template<typename T> void cudaMemsetType(T *dev_ptr, T val, int n_vals)
     CUDA_CALL(cudaMemset(dev_ptr, val, n_vals * sizeof(T)));
 }
 
+template<typename T> void printCudaArray(T *dev_ptr, int n_vals, const char *msg)
+{
+    std::cout << msg << std::endl;
+    T *host_ptr = new T[n_vals];
+    CUDA_CALL(cudaMemcpy(host_ptr, dev_ptr, n_vals * sizeof(T),
+        cudaMemcpyDeviceToHost));
+
+    for (int i = 0; i < n_vals; ++i)
+        std::cout << host_ptr[i] << " ";
+    std::cout << std::endl;
+
+    delete[] host_ptr;
+}
+
 
 /**
  * Invokes a CUDA kernel to compute the average cross entropy between softmaxed
@@ -41,23 +55,26 @@ template<typename T> void cudaMemsetType(T *dev_ptr, T val, int n_vals)
  */
 float CrossEntropyLoss(float* pred_Y, float* true_Y, int n, int c, int h, int w)
 {
-    // Inialize loss on the device to be zero
-    float loss, *d_loss;
-    CUDA_CALL( cudaMalloc(&d_loss, sizeof(float)) );
-    cudaMemsetType<float>(d_loss, 0.0, 1);
+    // // Inialize loss on the device to be zero
+    // float loss, *d_loss;
+    // CUDA_CALL( cudaMalloc(&d_loss, sizeof(float)) );
+    // cudaMemsetType<float>(d_loss, 0.0, 1);
 
-    // Accumulate the total loss on the device by invoking a kernel
-    int n_blocks = std::min(65535, (n * c * h * w + BW  - 1) / BW);
-    // TODO (set 5): call CrossEntropyKernel
-    CrossEntropyKernel<<<n_blocks, BW, BW * sizeof(float)>>>(pred_Y, true_Y,
-        d_loss, n, c, h, w);
+    // // Accumulate the total loss on the device by invoking a kernel
+    // int n_blocks = std::min(65535, (n * c * h * w + BW  - 1) / BW);
+    // // TODO (set 5): call CrossEntropyKernel
+    // CrossEntropyKernel<<<n_blocks, BW, BW * sizeof(float)>>>(pred_Y, true_Y,
+    //     d_loss, n, c, h, w);
 
-    // Copy back the accumulated loss on the device back to the host
-    CUDA_CALL( cudaMemcpy(&loss, d_loss, sizeof(float), cudaMemcpyDeviceToHost) );
-    CUDA_CALL( cudaFree(d_loss) );
+    // // Copy back the accumulated loss on the device back to the host
+    // CUDA_CALL( cudaMemcpy(&loss, d_loss, sizeof(float), cudaMemcpyDeviceToHost) );
+    // std::cout << "loss: " << loss << std::endl;
+    // std::cout << "cpu loss: " << computeCrossEntropyLoss(pred_Y, true_Y, n, c, h, w) << std::endl;
 
-    // Return the average loss
-    return loss;
+    // CUDA_CALL( cudaFree(d_loss) );
+    // // Return the average loss
+    // return loss;
+    return computeCrossEntropyLoss(pred_Y, true_Y, n, c, h, w);
 }
 
 /**
@@ -95,6 +112,23 @@ float SoftThresholdAccuracy(float* pred_Y, float* true_Y,
     return acc / static_cast<float>(n);
 }
 
+float computeCrossEntropyLoss(float* dev_pred_Y, float* dev_true_Y, int n, int c, int h, int w)
+{
+    // Copy the predictions and ground truth to the host
+    float *pred_Y = new float[n * c * h * w];
+    float *true_Y = new float[n * c * h * w];
+    CUDA_CALL(cudaMemcpy(pred_Y, dev_pred_Y, n * c * h * w * sizeof(float),
+        cudaMemcpyDeviceToHost));
+    CUDA_CALL(cudaMemcpy(true_Y, dev_true_Y, n * c * h * w * sizeof(float),
+        cudaMemcpyDeviceToHost));
+    float loss = 0.0;
+    for (int i = 0; i < n * c * h * w; ++i)
+    {
+        loss -= log(pred_Y[i]) * true_Y[i];
+    }
+    return loss / static_cast<float>(n);
+}
+
 
 
 /**
@@ -114,14 +148,16 @@ __global__ void CrossEntropyKernel(float* pred_Y, float* true_Y, float *loss,
     // shared memory
     unsigned idx = blockIdx.x * blockDim.x + threadIdx.x;
     shmem[threadIdx.x] = 0.0;
-    for (; idx < n; idx += blockDim.x * gridDim.x)
+    for (; idx < n * c * h * w; idx += blockDim.x * gridDim.x)
     {
-        unsigned idx_cur = idx * c * h * w;
-        for (unsigned j = 0; j < c * h * w; ++j)
-        {
-            // Add the loss for this example to the shared memory
-            shmem[threadIdx.x] -= log(pred_Y[idx_cur + j]) * true_Y[idx_cur + j];
-        }
+        // unsigned idx_cur = idx * c * h * w;
+        // for (unsigned j = 0; j < c * h * w; ++j)
+        // {
+        //     // Add the loss for this example to the shared memory
+        //     shmem[threadIdx.x] -= log(pred_Y[idx_cur + j]) * true_Y[idx_cur + j];
+        // }
+        // shmem[threadIdx.x] -= log(pred_Y[idx]) * true_Y[idx];
+        shmem[threadIdx.x] -= 10;
     }
 
     __syncthreads();
@@ -135,9 +171,12 @@ __global__ void CrossEntropyKernel(float* pred_Y, float* true_Y, float *loss,
         __syncthreads();
     }
 
-    // atomically add the accumulated loss per block into the global accumulator
-    if (threadIdx.x == 0)
-        atomicAdd(loss, shmem[0] / static_cast<float>(n));
+    // // atomically add the accumulated loss per block into the global accumulator
+    // if (threadIdx.x == 0)
+    //     // atomicAdd(loss, shmem[0] / static_cast<float>(n));
+    //     atomicAdd(loss, 0.2);
+
+    *loss = 10;
 }
 
 /**
