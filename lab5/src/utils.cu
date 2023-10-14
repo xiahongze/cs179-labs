@@ -55,24 +55,24 @@ template<typename T> void printCudaArray(T *dev_ptr, int n_vals, const char *msg
  */
 float CrossEntropyLoss(float* pred_Y, float* true_Y, int n, int c, int h, int w)
 {
-    // Inialize loss on the device to be zero
-    float loss, *d_loss;
-    CUDA_CALL( cudaMalloc(&d_loss, sizeof(float)) );
-    cudaMemsetType<float>(d_loss, 0.0, 1);
+    // // Inialize loss on the device to be zero
+    // float loss, *d_loss;
+    // CUDA_CALL( cudaMalloc(&d_loss, sizeof(float)) );
+    // cudaMemsetType<float>(d_loss, 0.0, 1);
 
-    // Accumulate the total loss on the device by invoking a kernel
-    int n_blocks = std::min(65535, (n * c * h * w + BW  - 1) / BW);
-    // TODO (set 5): call CrossEntropyKernel
-    CrossEntropyKernel<<<n_blocks, BW, BW * sizeof(float)>>>(pred_Y, true_Y,
-        d_loss, n, c, h, w);
+    // // Accumulate the total loss on the device by invoking a kernel
+    // int n_blocks = std::min(65535, (n * c * h * w + BW  - 1) / BW);
+    // // TODO (set 5): call CrossEntropyKernel
+    // CrossEntropyKernel<<<n_blocks, BW, BW * sizeof(float)>>>(pred_Y, true_Y,
+    //     d_loss, n, c, h, w);
 
-    // Copy back the accumulated loss on the device back to the host
-    CUDA_CALL( cudaMemcpy(&loss, d_loss, sizeof(float), cudaMemcpyDeviceToHost) );
+    // // Copy back the accumulated loss on the device back to the host
+    // CUDA_CALL( cudaMemcpy(&loss, d_loss, sizeof(float), cudaMemcpyDeviceToHost) );
 
-    CUDA_CALL( cudaFree(d_loss) );
-    // Return the average loss
-    return loss;
-    // return computeCrossEntropyLoss(pred_Y, true_Y, n, c, h, w);
+    // CUDA_CALL( cudaFree(d_loss) );
+    // // Return the average loss
+    // return loss;
+    return computeCrossEntropyLoss(pred_Y, true_Y, n, c, h, w);
 }
 
 /**
@@ -162,12 +162,12 @@ __global__ void CrossEntropyKernel(float* pred_Y, float* true_Y, float *loss,
         __syncthreads();
     }
 
-    // // atomically add the accumulated loss per block into the global accumulator
-    // if (threadIdx.x == 0)
-    //     // atomicAdd(loss, shmem[0] / static_cast<float>(n));
+    // atomically add the accumulated loss per block into the global accumulator
+    if (threadIdx.x == 0)
+        atomicAdd(loss, shmem[0] / static_cast<float>(n));
     //     atomicAdd(loss, 0.2);
 
-    *loss = 10;
+    // *loss = 10;
 }
 
 /**
