@@ -18,9 +18,16 @@ template<typename T> void cudaMemsetType(T *dev_ptr, T val, int n_vals)
 {
     // thrust::device_ptr<T> thrust_dev_ptr(dev_ptr);
     // thrust::fill(thrust_dev_ptr, thrust_dev_ptr + n_vals, val);
+    // unfortunately, thrust is not working on ubuntu20.04 somehow, hence use below instead
     CUDA_CALL(cudaMemset(dev_ptr, val, n_vals * sizeof(T)));
 }
 
+/**
+ * Prints the contents of a device buffer for debugging purposes.
+ * @param dev_ptr pointer to device buffer
+ * @param n_vals number of values in buffer
+ * @param msg message to print before printing buffer contents
+*/
 template<typename T> void printCudaArray(T *dev_ptr, int n_vals, const char *msg)
 {
     std::cout << msg << std::endl;
@@ -106,6 +113,10 @@ float SoftThresholdAccuracy(float* pred_Y, float* true_Y,
     return acc / static_cast<float>(n);
 }
 
+/**
+ * Computes the cross-entropy loss between softmaxed predictions pred_Y and
+ * ground truth true_Y on the host (CPU) for cross validation purposes.
+*/
 float computeCrossEntropyLoss(float* dev_pred_Y, float* dev_true_Y, int n, int c, int h, int w)
 {
     // Copy the predictions and ground truth to the host
@@ -138,8 +149,7 @@ __global__ void CrossEntropyKernel(float* pred_Y, float* true_Y, float *loss,
     //               pred_Y and true_Y, i.e. -sum( log(pred_Y[i]) * true_Y[i] ),
     //               where i ranges from 0 to (n*c*h*w) - 1
 
-    // have each thread in each block accumulate some of the total loss in
-    // shared memory
+    // have each thread in each block accumulate some of the total loss in shared memory
     unsigned idx = blockIdx.x * blockDim.x + threadIdx.x;
     shmem[threadIdx.x] = 0.0;
     for (; idx < n * c * h * w; idx += blockDim.x * gridDim.x)
@@ -149,8 +159,7 @@ __global__ void CrossEntropyKernel(float* pred_Y, float* true_Y, float *loss,
 
     __syncthreads();
 
-    // do a reduction to sum up all of the loss components in this block's
-    // shared memory
+    // do a reduction to sum up all of the loss components in this block's shared memory
     for (unsigned s = blockDim.x / 2; s > 0; s >>= 1)
     {
         if (threadIdx.x < s)
